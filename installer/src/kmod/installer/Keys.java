@@ -15,7 +15,21 @@ final class Keys {
     final X509Certificate cert;
     Keys(PrivateKey k, X509Certificate c) { key = k; cert = c; }
 
+    /** 预置在安装器 assets 里的签名密钥（私服客户端同源，保证注入包可被后续更新覆盖安装） */
+    static byte[] bundledPk8, bundledCrt;
+
     static Keys loadOrCreate(File dir, File backupDir) throws Exception {
+        if (bundledPk8 != null && bundledCrt != null) {
+            // 内置密钥优先：每次都覆盖，避免沿用它自己生成的旧密钥（否则和客户端签名不一致）
+            dir.mkdirs();
+            write(new File(dir, "signing.pk8"), bundledPk8);
+            write(new File(dir, "signing.crt"), bundledCrt);
+            if (backupDir != null) {
+                backupDir.mkdirs();
+                write(new File(backupDir, "signing.pk8"), bundledPk8);
+                write(new File(backupDir, "signing.crt"), bundledCrt);
+            }
+        }
         File pk = new File(dir, "signing.pk8"), ce = new File(dir, "signing.crt");
         if (!pk.exists() || !ce.exists()) {                                   // restore from the backup, if the app's data was cleared
             File bpk = new File(backupDir, "signing.pk8"), bce = new File(backupDir, "signing.crt");
