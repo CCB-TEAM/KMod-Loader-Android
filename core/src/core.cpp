@@ -33,6 +33,7 @@
 #include "lua_host.h"
 #include "resolver.h"
 #include "kmod_boot.h"
+#include "pak_mods.h"
 #include "net_redirect.h"
 #include "reflect.h"
 #include "Basic.hpp"
@@ -1020,6 +1021,7 @@ __attribute__((constructor)) static void CoreMain()
 {
     KLogInit();
     EnsureUserFolders();
+    KMod_ApplyStagedPaks();      // pak updates staged by the last run, before the game mounts its paks
     KBoot_Init();
     NetRedirect_Start();          // before anything else: the game reads its server URLs early
     Log("libkmodcore loaded");

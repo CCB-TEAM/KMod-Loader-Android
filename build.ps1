@@ -29,6 +29,7 @@ foreach ($proj in 'loader','core') {
 $strip = "$ndk\toolchains\llvm\prebuilt\windows-x86_64\bin\llvm-strip.exe"
 $coreOut = "$t\core\libkmodcore.$Flavor.so"; Copy-Item "$t\core\$suffix\libkmodcore.so" $coreOut -Force
 Invoke-Checked $strip @('--strip-all', $coreOut)
+Invoke-Checked $strip @('--strip-all', "$t\loader\$suffix\libkmod.so")      # no build paths in the shipped library
 # libs are added under their real names, so stage copies with the right file names
 $stage = "$t\stage-$Flavor"; Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory $stage | Out-Null
 Copy-Item "$t\loader\$suffix\libkmod.so" "$stage\libkmod.so"; Copy-Item $coreOut "$stage\libkmodcore.so"

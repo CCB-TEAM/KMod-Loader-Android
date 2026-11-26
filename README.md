@@ -3,10 +3,11 @@
 A Lua mod loader for the card game KARDS on Android. Mods are Lua scripts that read and call the game's own objects through Unreal's reflection system, and can load assets from the game's paks. No root is needed: the loader is added to the game's APK, which you rebuild and sign yourself.
 
 - Lua 5.4 mods, packaged as `.kmod` (a zip) with `mod.json`, settings, localization and versioned dependencies (`kmod>=0.2.0`, `kards>=1.61`).
+- Pak mods in `kmod/paks`, also shipped inside `.kmod` packages (checked by SHA-256, confirmed before they replace files).
 - A Mods page inside the game's own Settings screen.
 - Logging, a crash handler, a command console and a developer build with a floating console.
 
-**Documentation:** <https://kardswalker.github.io/kmod-docs/> (source: [CCB-TEAM/kmod-docs](https://github.com/CCB-TEAM/kmod-docs)): quick start, mod format, Lua API, C++ mods, console commands, debugging and building.
+**Documentation:** <https://ccb-team.github.io/kmod-docs/> (source: [CCB-TEAM/kmod-docs](https://github.com/CCB-TEAM/kmod-docs)): quick start, mod format, Lua API, C++ mods, console commands, debugging and building.
 
 ## Not included
 
@@ -22,6 +23,7 @@ loader/          libkmod.so: the shell loaded from SplashActivity
 core/            libkmodcore.so: ProcessEvent hook, Lua VM, reflection, logging
 core/lua/        modloader.lua, modmanager.lua (Mods page), commands.lua (console commands)
 overlay/         developer-build floating console (Java)
+examples/        example mods (card_art: https://github.com/CCB-TEAM/kmod-card-art) and native examples
 tools/           DexTool (patches SplashActivity), repack.py
 (documentation: https://github.com/CCB-TEAM/kmod-docs)
 ```

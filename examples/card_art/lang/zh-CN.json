@@ -1,6 +1,6 @@
 {
   "name": "卡图切换",
-  "description": "在卡牌详情页为每张卡选择不同的卡图变体。变体是放在 kmod/art/<包名>/ 里的 PNG。",
+  "description": "在卡牌详情页切换卡图；导入自己的图片和 GIF（可裁切为 1:1），管理卡图包。",
   "art": "卡图",
   "original": "原图",
   "import": "导入",
@@ -61,5 +61,6 @@
   "crop_bad": "无法打开这张图片",
   "crop_big": "图片太大，无法裁切",
   "import_anim": "导入动态图（GIF）",
-  "mgr_anim": "动态卡图（不提供预览）"
+  "mgr_anim": "动态卡图（第一帧）",
+  "mgr_bad_gif": "无法读取这个 GIF"
 }

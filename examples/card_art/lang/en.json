@@ -59,5 +59,7 @@
   "crop_bad": "Cannot open this picture",
   "crop_big": "The picture is too big to crop",
   "import_anim": "Import animated art (GIF)",
-  "mgr_anim": "Animated art (no preview)"
+  "mgr_anim": "Animated art (first frame)",
+  "description": "Switch card art on the card detail page; import your own pictures and GIFs (with a 1:1 cropper) and manage art packs.",
+  "mgr_bad_gif": "This GIF cannot be read"
 }

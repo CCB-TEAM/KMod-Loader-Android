@@ -85,15 +85,11 @@ local function realSeconds()
   if not (clock.pc and clock.pc:IsValid()) then clock.pc = FindFirstOf("PlayerController") end
   return clock.lib:GetRealTimeSeconds(clock.pc)
 end
-local function gifAnim(file, crop)
+-- the cached PNG frames of a GIF (decoded now if they are not there yet) -> folder, { delays = ... }, cache key
+local function gifFrames(file, crop)
   local cx, cy, cs
   if type(crop) == "table" and tonumber(crop.x) and tonumber(crop.y) and tonumber(crop.s) then cx, cy, cs = math.floor(crop.x), math.floor(crop.y), math.floor(crop.s) end
   local ck = file .. (cs and (":" .. cx .. "," .. cy .. "," .. cs) or "")
-  local a = anims[ck]
-  if a and a.frames[1]:IsValid() then return a end
-  if a then Log.warn("gif animation lost its frames, rebuilding: " .. ck)
-  elseif gifSeen[ck] then Log.warn("gif animation rebuilt: " .. ck) end
-  gifSeen[ck] = true
   local key = (ck:gsub("[^%w]", "_"))
   local dir = CACHE .. "/" .. key:sub(-90) .. "_" .. #ck
   local info
@@ -102,10 +98,21 @@ local function gifAnim(file, crop)
   if not (type(info) == "table" and type(info.delays) == "table" and #info.delays > 0) then
     kmod.mkdirs(dir)
     local r, err = kmod.gif_frames(file, dir, 480, 60, cx, cy, cs)
-    if not r then Log.warn("gif " .. file .. ": " .. tostring(err)); return nil end
+    if not r then Log.warn("gif " .. file .. ": " .. tostring(err)); return nil, nil, ck end
     info = r
     kmod.writeFile(dir .. "/frames.json", kmod.json.encode(r))
   end
+  return dir, info, ck
+end
+local function gifAnim(file, crop)
+  local cacheKey = file .. (type(crop) == "table" and (":" .. tostring(crop.x) .. "," .. tostring(crop.y) .. "," .. tostring(crop.s)) or "")
+  local a = anims[cacheKey]
+  if a and a.frames[1]:IsValid() then return a end
+  if a then Log.warn("gif animation lost its frames, rebuilding: " .. cacheKey)
+  elseif gifSeen[cacheKey] then Log.warn("gif animation rebuilt: " .. cacheKey) end
+  gifSeen[cacheKey] = true
+  local dir, info = gifFrames(file, crop)
+  if not dir then return nil end
   local frames, total = {}, 0
   for i = 1, #info.delays do
     local t = lib:ImportFileAsTexture2D(FindFirstOf("PlayerController"), dir .. string.format("/f%03d.png", i))
@@ -114,7 +121,7 @@ local function gifAnim(file, crop)
     total = total + info.delays[i]
   end
   a = { frames = frames, delays = info.delays, total = math.max(total, 1), t0 = realSeconds(), pinned = {} }
-  anims[ck] = a
+  anims[cacheKey] = a
   Log.info("gif " .. file .. ": " .. #frames .. " frames, " .. total .. " ms")
   return a
 end
@@ -853,7 +860,7 @@ end
 local webMgr
 local TKEYS = { "mgr_title", "mgr_intro", "mgr_none", "mgr_counts", "mgr_open", "mgr_rename_to", "mgr_rename", "mgr_images", "mgr_remove", "mgr_again",
   "mgr_prev", "mgr_next", "mgr_delete_pack", "mgr_back", "mgr_import_pack", "mgr_export", "mgr_search", "mgr_preview", "mgr_hide", "mgr_too_big",
-  "mgr_no_match", "mgr_match_packs", "mgr_match_files", "mgr_art_new", "mgr_anim" }
+  "mgr_no_match", "mgr_match_packs", "mgr_match_files", "mgr_art_new", "mgr_anim", "mgr_bad_gif" }
 
 local function webState()
   local list = {}
@@ -934,7 +941,12 @@ local function openWebManager()
       local it = info and info.entries[tonumber(m.i) or 0]
       if not (it and safeImageName(it.File)) then return end
       local pext = it.File:match("%.([^.]+)$"):lower()
-      if pext == "gif" then w:send({ cmd = "preview", pack = m.pack, i = m.i, anim = true }); return end
+      if pext == "gif" then                                          -- a GIF: its first frame, cropped as the card shows it
+        local dir = gifFrames(ART .. "/" .. m.pack .. "/" .. it.File, it.Crop)
+        local png = dir and kmod.readFile(dir .. "/f001.png")
+        w:send({ cmd = "preview", pack = m.pack, i = m.i, anim = true, uri = png and ("data:image/png;base64," .. kmod.base64(png)) or nil, bad = not png or nil })
+        return
+      end
       local data = kmod.readFile(ART .. "/" .. m.pack .. "/" .. it.File)
       if not data then return end
       if #data > 20 * 1024 * 1024 then w:send({ cmd = "preview", pack = m.pack, i = m.i, err = true }); return end

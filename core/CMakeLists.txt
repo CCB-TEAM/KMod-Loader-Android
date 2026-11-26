@@ -46,7 +46,7 @@ foreach(NAME modloader modmanager commands json ui net ue4ss)
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/lua/${NAME}.lua)
 endforeach()
 
-add_library(kmodcore SHARED src/core.cpp src/lua_host.cpp src/lua_worker.cpp src/resolver.cpp src/kmod_boot.cpp src/http.cpp src/net_conn.cpp src/net_redirect.cpp src/native_mods.cpp src/native_ui.cpp src/reflect.cpp src/kmod_log.cpp src/gif_decode.cpp $<TARGET_OBJECTS:kmodsdk> $<TARGET_OBJECTS:kmodlua>)
+add_library(kmodcore SHARED src/core.cpp src/lua_host.cpp src/lua_worker.cpp src/resolver.cpp src/kmod_boot.cpp src/http.cpp src/net_conn.cpp src/net_redirect.cpp src/native_mods.cpp src/native_ui.cpp src/reflect.cpp src/kmod_log.cpp src/gif_decode.cpp src/pak_mods.cpp $<TARGET_OBJECTS:kmodsdk> $<TARGET_OBJECTS:kmodlua>)
 target_include_directories(kmodcore PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${KMOD_SDK_DIR} ${KMOD_SDK_DIR}/SDK ${KMOD_LUA_DIR}/include ${CMAKE_CURRENT_BINARY_DIR}/gen)
 if(KMOD_DEV)
   target_compile_definitions(kmodcore PRIVATE KMOD_DEV=1)

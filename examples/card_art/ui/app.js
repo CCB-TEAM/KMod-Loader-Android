@@ -54,7 +54,7 @@ function packView(p) {
     h += '<div class="row"><span class="name">' + esc(es[i].name || es[i].card) + (es[i].name ? '<span class="sub">' + esc(es[i].card) + '</span>' : '') + '</span><span class="meta">' + esc(es[i].file) + '</span>' +
       '<button class="btn" data-a="preview" data-p="' + esc(p.name) + '" data-i="' + n + '">' + esc(open ? T('mgr_hide') : T('mgr_preview')) + '</button>' +
       '<button class="btn danger' + (on ? ' armed' : '') + '" data-a="remove" data-p="' + esc(p.name) + '" data-i="' + n + '">' + esc(on ? T('mgr_again') : T('mgr_remove')) + '</button></div>';
-    if (open) h += '<div class="prev">' + (prev.anim ? esc(T('mgr_anim')) : prev.err ? esc(T('mgr_too_big')) : prev.uri ? '<img src="' + prev.uri + '">' + esc(T('mgr_art_new')) : '…') + '</div>';
+    if (open) h += '<div class="prev">' + (prev.bad ? esc(T('mgr_bad_gif')) : prev.err ? esc(T('mgr_too_big')) : prev.uri ? '<img src="' + prev.uri + '">' + esc(T(prev.anim ? 'mgr_anim' : 'mgr_art_new')) : '…') + '</div>';
   }
   if (!es.length) h += '<div class="empty">' + esc(T('mgr_no_match')) + '</div>';
   if (pages > 1) h += '<div class="pager"><button class="btn" data-a="page" data-d="-1"' + (view.page <= 1 ? ' disabled' : '') + '>' + esc(T('mgr_prev')) + '</button>' +
@@ -93,7 +93,7 @@ body.addEventListener('click', function (e) {
 
 kmod.onmessage = function (m) {
   if (m.cmd === 'preview') {
-    if (prev.key === m.pack + '|' + m.i) { prev.uri = m.uri || null; prev.err = !!m.err; prev.anim = !!m.anim; render(); }
+    if (prev.key === m.pack + '|' + m.i) { prev.uri = m.uri || null; prev.err = !!m.err; prev.anim = !!m.anim; prev.bad = !!m.bad; render(); }
     return;
   }
   if (m.cmd === 'init') { S.t = m.t || {}; }

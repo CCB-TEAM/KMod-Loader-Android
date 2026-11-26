@@ -5,6 +5,7 @@ A starting point for a [kmod loader](https://kardswalker.github.io/kmod-docs/) m
 ```
 my_mod/            the mod itself: rename the folder AND the "id" in mod.json (they must match)
   mod.json         manifest: id, version, dependencies, settings
+  icon.png         icon shown by the launcher (square, 256x256, at most 512 KB)
   main.lua         the script (comments explain each part)
   lang/            optional translations (en.json, zh-CN.json ...)
 tools/pack.py      check the mod and pack it into dist/<id>-<version>.kmod

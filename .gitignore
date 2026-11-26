@@ -18,3 +18,6 @@ out/
 
 # signing secrets
 release-key.txt
+
+# mod icons are part of the source
+!**/icon.png
