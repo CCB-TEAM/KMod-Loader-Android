@@ -433,9 +433,9 @@ static std::atomic<int> g_pakMounts{0};
 static PakAddrs g_pak;
 static bool g_pakTried = false, g_pakReady = false;
 
-static bool WidePrefix(const char16_t* w, const std::string& prefix)
+static bool WidePrefix16(const char16_t* w, const std::u16string& prefix)
 {
-    for (size_t i = 0; i < prefix.size(); i++) if (w[i] != (char16_t)(unsigned char)prefix[i]) return false;
+    for (size_t i = 0; i < prefix.size(); i++) if (w[i] != prefix[i]) return false;
     return true;
 }
 
@@ -444,12 +444,12 @@ static uint64_t HookedPakMount(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a
     const char16_t* path = a1 ? *reinterpret_cast<const char16_t* const*>(a1) : nullptr;
     if (path)
     {
-        static const std::string prefix = KModRoot() + "/paks/";
-        static const std::string alt = "/storage/emulated/0/Android/media/" + KPackageName() + "/kmod/paks/";
+        static const std::u16string prefix = Utf8To16(KModRoot() + "/paks/");
+        static const std::u16string alt = Utf8To16("/storage/emulated/0/Android/media/" + KPackageName() + "/kmod/paks/");
         int32_t* order = reinterpret_cast<int32_t*>(a1 + 8);
-        std::string shown;
-        for (int i = 0; i < 200 && path[i]; i++) shown += (path[i] < 128 ? (char)path[i] : '?');
-        if (WidePrefix(path, prefix) || WidePrefix(path, alt))
+        size_t plen = 0; while (plen < 300 && path[plen]) plen++;
+        std::string shown = Utf16To8(path, plen);
+        if (WidePrefix16(path, prefix) || WidePrefix16(path, alt))
         {
             int n = g_pakMounts.fetch_add(1);
             Log("pak mount: %s (order %d -> %d)", shown.c_str(), (int)*order, 100 + n);
@@ -479,8 +479,7 @@ bool KMod_MountPak(const std::string& path)
 {
     uintptr_t base = InSDKUtils::GetImageBase();
     if (!base || !EnsurePak(base) || !g_pak.pakFile) return false;
-    std::u16string w;
-    for (unsigned char c : path) w.push_back(c);          // paths are ASCII in practice; UTF-8 bytes are widened one by one
+    std::u16string w = Utf8To16(path);                     // file names may be Chinese etc.: decode, not widen byte by byte
     struct { const char16_t* data; int32_t num; int32_t max; } fs = {w.c_str(), (int32_t)w.size() + 1, (int32_t)w.size() + 1};
     using Fn = uint64_t (*)(void*, void*, int32_t);
     uint64_t r = reinterpret_cast<Fn>(g_pak.mountFn)(g_pak.pakFile, &fs, -1);
@@ -504,7 +503,24 @@ static std::vector<std::string> ListPakFiles()
         closedir(d);
     }
     std::sort(names.begin(), names.end());
-    return names;
+    // kmod/pak-order.txt (written by the launcher): one .pak file name per line, mounted in that order, so a later line
+    // wins over an earlier one. Paks it does not name come after the listed ones, by name.
+    std::vector<std::string> ordered;
+    if (FILE* f = fopen((KModRoot() + "/pak-order.txt").c_str(), "rb"))
+    {
+        char line[1024];
+        while (fgets(line, sizeof line, f))
+        {
+            std::string n = line;
+            if (n.size() >= 3 && (unsigned char)n[0] == 0xef && (unsigned char)n[1] == 0xbb && (unsigned char)n[2] == 0xbf) n.erase(0, 3);
+            while (!n.empty() && (n.back() == '\n' || n.back() == '\r' || n.back() == ' ')) n.pop_back();
+            auto it = std::find(names.begin(), names.end(), n);
+            if (it != names.end()) { ordered.push_back(n); names.erase(it); }
+        }
+        fclose(f);
+    }
+    ordered.insert(ordered.end(), names.begin(), names.end());
+    return ordered;
 }
 
 static std::string* PakStatusRef(const std::string& name)
