@@ -128,6 +128,14 @@ void KBoot_MarkStable()
 {
     g_crashes = 0;
     WriteAll(Dir() + "/state.txt", std::string("crashes=0\nsafe=") + (g_safe ? "1" : "0") + "\nphase=stable\n");
+    // A crash mark is a one-shot record. Leaving it in place causes the next
+    // successful launch to quarantine the same mod again.
+    if (g_markFd >= 0)
+    {
+        ftruncate(g_markFd, 0);
+        lseek(g_markFd, 0, SEEK_SET);
+        fsync(g_markFd);
+    }
 }
 
 void KBoot_OnCrash()

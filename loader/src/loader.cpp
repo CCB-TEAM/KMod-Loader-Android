@@ -111,6 +111,7 @@ extern "C" JNIEXPORT void JNICALL Java_kmod_Overlay_nativeEval(JNIEnv* env, jcla
 // returns length copied (>=0) or -1 when the queue is empty
 extern "C" __attribute__((visibility("default"))) int KMod_PopEval(char* out, int cap)
 {
+    if (!out || cap <= 0) return -1;
     std::lock_guard<std::mutex> g(g_evalMu);
     if (g_evalQ.empty()) return -1;
     std::string s = std::move(g_evalQ.front()); g_evalQ.pop_front();

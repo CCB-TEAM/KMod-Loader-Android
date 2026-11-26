@@ -28,7 +28,8 @@ std::mutex g_mu;
 JavaVM* g_vm = nullptr;
 jclass g_cls = nullptr;
 jobject g_appLoader = nullptr;
-jmethodID g_show = nullptr, g_set = nullptr, g_close = nullptr;
+jmethodID g_show = nullptr, g_set = nullptr, g_close = nullptr, g_pick = nullptr, g_pickFile = nullptr, g_saveFile = nullptr;
+int g_nextPick = 1;
 bool g_tried = false, g_ok = false;
 std::string g_err;
 
@@ -176,6 +177,9 @@ bool EnsureBridge()
     g_close = env->GetStaticMethodID(g_cls, "close", "(I)V");
     g_curActivity = env->GetStaticMethodID(g_cls, "currentActivity", "()Landroid/app/Activity;");
     g_runOnUi = env->GetStaticMethodID(g_cls, "runOnUi", "(JJ)V");
+    g_pick = env->GetStaticMethodID(g_cls, "pickImage", "(ILjava/lang/String;)V");
+    g_pickFile = env->GetStaticMethodID(g_cls, "pickFile", "(ILjava/lang/String;Ljava/lang/String;)V");
+    g_saveFile = env->GetStaticMethodID(g_cls, "saveFile", "(ILjava/lang/String;Ljava/lang/String;)V");
     if (!g_show || !g_set || !g_close || !g_curActivity || !g_runOnUi) { g_err = "UiBridge methods missing"; TakeException(env); return false; }
     g_ok = true;
     KLog(KLOG_INFO, "native", "native UI bridge ready");
@@ -195,6 +199,47 @@ int NativeUi_Show(const char* specJson, KModUiEventFn cb, void* user)
     std::string ex = TakeException(env);
     if (!ex.empty()) { g_panels.erase(id); return -1; }
     return id;
+}
+
+bool Platform_KeyDown(const char*) { return false; }
+
+bool NativeUi_PickImage(const char* destNoExt, KModUiEventFn cb, void* user)
+{
+    if (!destNoExt || !cb || !EnsureBridge() || !g_pick) return false;
+    JNIEnv* env = Env();
+    int token = g_nextPick++;
+    g_panels[-token] = {cb, user};
+    jstring d = MakeString(env, destNoExt);
+    env->CallStaticVoidMethod(g_cls, g_pick, (jint)token, d);
+    env->DeleteLocalRef(d);
+    if (!TakeException(env).empty()) { g_panels.erase(-token); return false; }
+    return true;
+}
+
+bool NativeUi_PickFile(const char* destNoExt, const char* exts, KModUiEventFn cb, void* user)
+{
+    if (!destNoExt || !exts || !cb || !EnsureBridge() || !g_pickFile) return false;
+    JNIEnv* env = Env();
+    int token = g_nextPick++;
+    g_panels[-token] = {cb, user};
+    jstring d = MakeString(env, destNoExt), e = MakeString(env, exts);
+    env->CallStaticVoidMethod(g_cls, g_pickFile, (jint)token, d, e);
+    env->DeleteLocalRef(d); env->DeleteLocalRef(e);
+    if (!TakeException(env).empty()) { g_panels.erase(-token); return false; }
+    return true;
+}
+
+bool NativeUi_SaveFile(const char* src, const char* suggestedName, KModUiEventFn cb, void* user)
+{
+    if (!src || !suggestedName || !cb || !EnsureBridge() || !g_saveFile) return false;
+    JNIEnv* env = Env();
+    int token = g_nextPick++;
+    g_panels[-token] = {cb, user};
+    jstring s = MakeString(env, src), n = MakeString(env, suggestedName);
+    env->CallStaticVoidMethod(g_cls, g_saveFile, (jint)token, s, n);
+    env->DeleteLocalRef(s); env->DeleteLocalRef(n);
+    if (!TakeException(env).empty()) { g_panels.erase(-token); return false; }
+    return true;
 }
 
 void NativeUi_Set(int panel, const char* key, const char* value)
@@ -226,7 +271,7 @@ void NativeUi_Drain()
         auto it = g_panels.find(e.panel);
         if (it == g_panels.end()) continue;
         PanelCb pc = it->second;
-        if (e.id == "$close" || e.id == "$error") g_panels.erase(it);
+        if (e.id == "$close" || e.id == "$error" || e.id == "$picked") g_panels.erase(it);
         if (pc.cb) pc.cb(e.panel, e.id.c_str(), e.value.c_str(), pc.user);
     }
 }

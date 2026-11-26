@@ -3,6 +3,12 @@ package kmod;
 import android.app.Activity;
 import android.app.Application;
 import android.app.Dialog;
+import android.app.Fragment;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.Bundle;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -31,6 +37,9 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -306,5 +315,179 @@ public final class UiBridge {
             }
             else if (v instanceof TextView) ((TextView) v).setText(value);
         } finally { p.quiet = false; }
+    }
+    // ------------------------------------------------------------------------------------------ picking an image
+    /**
+     * Opens the system's image chooser (gallery, Photos, files...) on the game's activity. The chosen image is decoded, scaled down to at
+     * most 2048 px and saved as PNG to destNoExt + ".png". The result arrives like a panel event: panel = -token, id "$picked",
+     * value = the saved path, or "" if the player cancelled, or "!" + message on an error. Nothing needs a storage permission: the
+     * chooser hands over a content:// stream.
+     */
+    public static void pickImage(final int token, final String destNoExt) {
+        ui.post(new Runnable() { public void run() {
+            try {
+                Activity a = activity();
+                if (a == null) { nativeEvent(-token, "$picked", "!no activity"); return; }
+                PickFragment f = new PickFragment();
+                f.token = token; f.dest = destNoExt;
+                a.getFragmentManager().beginTransaction().add(f, "kmod.pick." + token).commitAllowingStateLoss();
+            } catch (Throwable t) { Log.e(TAG, "pickImage failed", t); nativeEvent(-token, "$picked", "!" + t); }
+        } });
+    }
+
+    /** A headless fragment: the only way to receive onActivityResult without owning the game's activity class. */
+    public static final class PickFragment extends Fragment {
+        int token; String dest;
+        private boolean started;
+
+        @Override public void onCreate(Bundle b) {
+            super.onCreate(b);
+            if (started) return;
+            started = true;
+            try {
+                Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("image/*");
+                startActivityForResult(Intent.createChooser(i, "Select image"), 4711);
+            } catch (Throwable t) { finish("!" + t); }
+        }
+
+        @Override public void onActivityResult(int req, int res, final Intent data) {
+            if (req != 4711) return;
+            final Uri uri = res == Activity.RESULT_OK && data != null ? data.getData() : null;
+            if (uri == null) { finish(""); return; }
+            new Thread(new Runnable() { public void run() {
+                try { finish(save(uri)); } catch (Throwable t) { Log.e(TAG, "image import failed", t); finish("!" + t); }
+            } }).start();
+        }
+
+        private String save(Uri uri) throws Exception {
+            Activity a = getActivity();
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            try (InputStream in = a.getContentResolver().openInputStream(uri)) { BitmapFactory.decodeStream(in, null, o); }
+            int sample = 1;
+            while (Math.max(o.outWidth, o.outHeight) / sample > 2048) sample *= 2;
+            o = new BitmapFactory.Options();
+            o.inSampleSize = sample;
+            Bitmap bmp;
+            try (InputStream in = a.getContentResolver().openInputStream(uri)) { bmp = BitmapFactory.decodeStream(in, null, o); }
+            if (bmp == null) throw new Exception("not an image the system can decode");
+            File out = new File(dest + ".png");
+            File dir = out.getParentFile();
+            if (dir != null) dir.mkdirs();
+            try (FileOutputStream fo = new FileOutputStream(out)) { bmp.compress(Bitmap.CompressFormat.PNG, 100, fo); }
+            bmp.recycle();
+            return out.getAbsolutePath();
+        }
+
+        private void finish(final String value) {
+            nativeEvent(-token, "$picked", value);
+            ui.post(new Runnable() { public void run() {
+                try { getFragmentManager().beginTransaction().remove(PickFragment.this).commitAllowingStateLoss(); } catch (Throwable ignored) { }
+            } });
+        }
+    }
+    // ------------------------------------------------------------------------------------------ picking / saving any file
+    /** Like pickImage, but any file whose extension is in exts (comma separated); copied as is to destNoExt + "." + ext. Value: path + "\n" + original name. */
+    public static void pickFile(final int token, final String destNoExt, final String exts) {
+        ui.post(new Runnable() { public void run() {
+            try {
+                Activity a = activity();
+                if (a == null) { nativeEvent(-token, "$picked", "!no activity"); return; }
+                FileFragment f = new FileFragment();
+                f.token = token; f.dest = destNoExt; f.exts = exts; f.save = false;
+                a.getFragmentManager().beginTransaction().add(f, "kmod.file." + token).commitAllowingStateLoss();
+            } catch (Throwable t) { Log.e(TAG, "pickFile failed", t); nativeEvent(-token, "$picked", "!" + t); }
+        } });
+    }
+
+    /** "Save as": the player picks where src is written (ACTION_CREATE_DOCUMENT). Value: the name the player chose, "" when cancelled. */
+    public static void saveFile(final int token, final String src, final String suggestedName) {
+        ui.post(new Runnable() { public void run() {
+            try {
+                Activity a = activity();
+                if (a == null) { nativeEvent(-token, "$picked", "!no activity"); return; }
+                FileFragment f = new FileFragment();
+                f.token = token; f.src = src; f.name = suggestedName; f.save = true;
+                a.getFragmentManager().beginTransaction().add(f, "kmod.file." + token).commitAllowingStateLoss();
+            } catch (Throwable t) { Log.e(TAG, "saveFile failed", t); nativeEvent(-token, "$picked", "!" + t); }
+        } });
+    }
+
+    public static final class FileFragment extends Fragment {
+        int token; String dest, exts, src, name; boolean save;
+        private boolean started;
+
+        @Override public void onCreate(Bundle b) {
+            super.onCreate(b);
+            if (started) return;
+            started = true;
+            try {
+                Intent i;
+                if (save) {
+                    i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("application/octet-stream");
+                    i.putExtra(Intent.EXTRA_TITLE, name);
+                } else {
+                    i = new Intent(Intent.ACTION_GET_CONTENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("*/*");
+                }
+                startActivityForResult(i, 4712);
+            } catch (Throwable t) { finish("!" + t); }
+        }
+
+        @Override public void onActivityResult(int req, int res, final Intent data) {
+            if (req != 4712) return;
+            final Uri uri = res == Activity.RESULT_OK && data != null ? data.getData() : null;
+            if (uri == null) { finish(""); return; }
+            new Thread(new Runnable() { public void run() {
+                try { finish(save ? write(uri) : read(uri)); } catch (Throwable t) { Log.e(TAG, "file transfer failed", t); finish("!" + t); }
+            } }).start();
+        }
+
+        private String displayName(Uri uri) {
+            try (android.database.Cursor c = getActivity().getContentResolver().query(uri, null, null, null, null)) {
+                if (c != null && c.moveToFirst()) {
+                    int idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                    if (idx >= 0) return c.getString(idx);
+                }
+            } catch (Throwable ignored) { }
+            String s = uri.getLastPathSegment();
+            return s == null ? "file" : s.substring(s.lastIndexOf('/') + 1);
+        }
+
+        private String read(Uri uri) throws Exception {
+            String shown = displayName(uri);
+            String ext = shown.contains(".") ? shown.substring(shown.lastIndexOf('.') + 1).toLowerCase() : "";
+            boolean ok = false;
+            for (String e : exts.split(",")) if (e.trim().equalsIgnoreCase(ext)) ok = true;
+            if (!ok) throw new Exception("unsupported file type: ." + ext);
+            File out = new File(dest + "." + ext);
+            File dir = out.getParentFile();
+            if (dir != null) dir.mkdirs();
+            try (InputStream in = getActivity().getContentResolver().openInputStream(uri); FileOutputStream fo = new FileOutputStream(out)) {
+                byte[] buf = new byte[1 << 16]; int n;
+                while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+            }
+            return out.getAbsolutePath() + "\n" + shown;
+        }
+
+        private String write(Uri uri) throws Exception {
+            try (InputStream in = new java.io.FileInputStream(src); java.io.OutputStream os = getActivity().getContentResolver().openOutputStream(uri)) {
+                byte[] buf = new byte[1 << 16]; int n;
+                while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+            }
+            return displayName(uri);
+        }
+
+        private void finish(final String value) {
+            nativeEvent(-token, "$picked", value);
+            ui.post(new Runnable() { public void run() {
+                try { getFragmentManager().beginTransaction().remove(FileFragment.this).commitAllowingStateLoss(); } catch (Throwable ignored) { }
+            } });
+        }
     }
 }

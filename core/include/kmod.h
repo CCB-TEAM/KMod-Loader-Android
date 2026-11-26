@@ -1,11 +1,13 @@
 /* kmod native mod API (level 2). Include this one header; no other kmod or game header is needed.
  *
- * A native mod is a shared library (arm64-v8a) that exports:
+ * A native mod is a shared library (Android: arm64-v8a .so, Windows: x64 .dll) that exports:
  *
  *     KMOD_EXPORT int  kmod_start(const KModApi* api);   // return 0 on success; called once, on the game thread
  *     KMOD_EXPORT void kmod_stop(void);                  // optional; called when the game shuts the mod down
  *
- * and is declared in mod.json ("native": "libmymod.so", "platform": ["Android"], "format": 2). Everything the mod can do
+ * and is declared in mod.json ("native": {"Android": "libmymod.so", "Windows": "mymod.dll"}, "platform": ["Android", "Windows"], "format": 2).
+ * The same source builds for either platform: only the target platform / toolchain changes. Everything in this header is portable
+ * except the parts marked ANDROID ONLY (they are null on Windows; check for null, or test api->platform). Everything the mod can do
  * goes through the KModApi table the loader passes in: the table only ever grows (check api->struct_size before using a
  * field that was added later), so a mod built against level 1 keeps working with newer loaders.
  *
@@ -22,8 +24,17 @@
 extern "C" {
 #endif
 
-#define KMOD_API_LEVEL 2
-#define KMOD_EXPORT __attribute__((visibility("default")))
+#define KMOD_API_LEVEL 3
+
+#if defined(_WIN32)
+#  define KMOD_PLATFORM_WINDOWS 1
+#  define KMOD_EXPORT __declspec(dllexport)
+#elif defined(__ANDROID__)
+#  define KMOD_PLATFORM_ANDROID 1
+#  define KMOD_EXPORT __attribute__((visibility("default")))
+#else
+#  error "kmod mods are built for Windows (x64) or Android (arm64)"
+#endif
 
 enum { KMOD_LOG_DEBUG = 0, KMOD_LOG_INFO = 1, KMOD_LOG_WARN = 2, KMOD_LOG_ERROR = 3 };
 
@@ -70,7 +81,10 @@ typedef struct KModApi {
     /* Finds the first match of an IDA-style pattern ("FD 7B ?? A9 ?? ?? 00 90") in the main library's code; 0 if none. */
     uintptr_t (*find_pattern)(const char* pattern);
     /* Inline-hooks a function: detour replaces target, *original receives a callable trampoline. Returns 0 on success.
-     * The first 4 instructions may contain ADR/ADRP/LDR literal/B/BL (they are relocated), but not conditional branches. */
+     * The overwritten prologue is relocated by the loader. Android (arm64): the first 4 instructions may contain ADR/ADRP/LDR literal/B/BL
+     * but not conditional branches. Windows (x64): the first 14+ bytes (whole instructions) may contain RIP-relative operands and
+     * call/jmp/jcc rel; not loop/jrcxz or a jump into the overwritten bytes. Calling convention of detour/original: the platform's
+     * default C convention (AAPCS64 / Microsoft x64). */
     int (*hook_function)(void* target, void* detour, void** original);
 
     /* ---- the game's reflection data ---- */
@@ -90,7 +104,7 @@ typedef struct KModApi {
     void (*register_lua_function)(const char* name, KModLuaFn fn);
     KModLuaApi lua;
 
-    /* ---- level 2: Android UI (plain Android views in a dialog on the game's activity) ---- */
+    /* ---- level 2: ANDROID ONLY (all null on Windows): plain Android views in a dialog on the game's activity ---- */
     /* spec_json: { "title", "modal", "close", "items": [ {type: text|button|switch|slider|edit|choice, id, text, value, min, max,
      * options} ] } (see docs). Returns a panel id (> 0) or -1. Events arrive on the game thread. */
     int (*ui_show)(const char* spec_json, KModUiEventFn cb, void* user);
@@ -105,6 +119,9 @@ typedef struct KModApi {
     void* (*activity)(void);
     /* runs fn(user) on the Android UI thread (the one that owns views) */
     void (*run_on_ui_thread)(void (*fn)(void*), void* user);
+
+    /* ---- level 3 ---- */
+    const char* platform;                                 /* "Android" or "Windows" */
 } KModApi;
 
 typedef int (*KModStartFn)(const KModApi* api);
@@ -155,6 +172,7 @@ inline bool HookFunction(const char* path, KModHookFn pre, KModHookFn post = nul
 using UiHandler = std::function<void(int panel, const char* id, const char* value)>;
 inline int ShowPanel(const std::string& specJson, UiHandler handler)
 {
+    if (!g_api->ui_show) return -1;                    /* no UI on this platform */
     auto* h = new UiHandler(std::move(handler));
     int id = g_api->ui_show(specJson.c_str(), [](int panel, const char* wid, const char* val, void* user)
     {

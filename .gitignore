@@ -15,3 +15,6 @@ out/
 *.png
 *.log
 *.err
+
+# signing secrets
+release-key.txt

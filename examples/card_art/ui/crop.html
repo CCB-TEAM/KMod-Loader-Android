@@ -1,0 +1,14 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="crop.css"></head>
+<body>
+<div id="win">
+  <div id="bar"><span id="title"></span><button id="x" data-nodrag>×</button></div>
+  <div id="wrap"><div id="stage"><img id="img" draggable="false"><div class="grid"></div></div></div>
+  <div id="ctl">
+    <div id="hint"></div>
+    <div class="zrow"><span id="zl"></span><input id="zoom" type="range" min="0" max="1000" value="0" data-nodrag></div>
+    <div class="brow"><button class="btn" id="cancel"></button><button class="btn acc" id="ok"></button></div>
+  </div>
+</div>
+<script src="crop.js"></script>
+</body></html>
