@@ -19,7 +19,7 @@ final class Keys {
         File pk = new File(dir, "signing.pk8"), ce = new File(dir, "signing.crt");
         if (!pk.exists() || !ce.exists()) {                                   // restore from the backup, if the app's data was cleared
             File bpk = new File(backupDir, "signing.pk8"), bce = new File(backupDir, "signing.crt");
-            if (bpk.exists() && bce.exists()) { copy(bpk, pk); copy(bce, ce); }
+            if (bpk.exists() && bce.exists()) { dir.mkdirs(); copy(bpk, pk); copy(bce, ce); }   // the private folder may not exist yet (fresh install)
         }
         if (pk.exists() && ce.exists()) {
             PrivateKey k = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(read(pk)));
